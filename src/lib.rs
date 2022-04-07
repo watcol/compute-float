@@ -869,3 +869,122 @@ const POWERS_OF_TEN: [(u64, u64); 696] = [
     (0x6F8E118F0F0E2195, 0xA7655D1D2103911F), // 1e346
     (0x4B7195F2D2D1A9FB, 0xD13EB46469447567), // 1e347
 ];
+
+#[cfg(test)]
+#[allow(clippy::excessive_precision)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_f32() {
+        assert_eq!(lemire(false, 5, -20), Some(5e-20f32));
+        assert_eq!(lemire(false, 67, 14), Some(67e+14f32));
+        assert_eq!(lemire(false, 985, 15), Some(985e+15f32));
+        assert_eq!(lemire(false, 55895, -16), Some(55895e-16f32));
+        assert_eq!(lemire(false, 7038531, -32), Some(7038531e-32f32));
+        assert_eq!(lemire(false, 702990899, -20), Some(702990899e-20f32));
+        assert_eq!(lemire(false, 25933168707, 13), Some(25933168707e+13f32));
+        assert_eq!(lemire(false, 596428896559, 20), Some(596428896559e+20f32));
+
+        assert_eq!(lemire(false, 3, -23), Some(3e-23f32));
+        assert_eq!(lemire(false, 57, 18), Some(57e+18f32));
+        assert_eq!(lemire(false, 789, -35), Some(789e-35f32));
+        assert_eq!(lemire(false, 2539, -18), Some(2539e-18f32));
+        assert_eq!(lemire(false, 76173, 28), Some(76173e+28f32));
+        assert_eq!(lemire(false, 887745, -11), Some(887745e-11f32));
+        assert_eq!(lemire(false, 5382571, -37), Some(5382571e-37f32));
+        assert_eq!(lemire(false, 82381273, -35), Some(82381273e-35f32));
+        assert_eq!(lemire(false, 750486563, -38), Some(750486563e-38f32));
+        assert_eq!(lemire(false, 3752432815, -39), Some(3752432815e-39f32));
+        assert_eq!(lemire(false, 75224575729, -45), Some(75224575729e-45f32));
+        assert_eq!(lemire(false, 459926601011, 15), Some(459926601011e+15f32));
+    }
+
+    // #[test]
+    fn test_f64() {
+        assert_eq!(lemire(false, 5, 125), Some(5e+125f64));
+        assert_eq!(lemire(false, 69, 267), Some(69e+267f64));
+        assert_eq!(lemire(false, 999, -26), Some(999e-26f64));
+        assert_eq!(lemire(false, 7681, -34), Some(7681e-34f64));
+        assert_eq!(lemire(false, 75569, -254), Some(75569e-254f64));
+        assert_eq!(lemire(false, 928609, -261), Some(928609e-261f64));
+        assert_eq!(lemire(false, 9210917, 80), Some(9210917e+80f64));
+        assert_eq!(lemire(false, 84863171, 114), Some(84863171e+114f64));
+        assert_eq!(lemire(false, 653777767, 273), Some(653777767e+273f64));
+        assert_eq!(lemire(false, 5232604057, -298), Some(5232604057e-298f64));
+        assert_eq!(lemire(false, 27235667517, -109), Some(27235667517e-109f64));
+        assert_eq!(
+            lemire(false, 653532977297, -123),
+            Some(653532977297e-123f64)
+        );
+        assert_eq!(
+            lemire(false, 3142213164987, -294),
+            Some(3142213164987e-294f64)
+        );
+        assert_eq!(
+            lemire(false, 46202199371337, -72),
+            Some(46202199371337e-072f64)
+        );
+        assert_eq!(
+            lemire(false, 231010996856685, -73),
+            Some(231010996856685e-073f64)
+        );
+        assert_eq!(
+            lemire(false, 9324754620109615, 212),
+            Some(9324754620109615e+212f64)
+        );
+        assert_eq!(
+            lemire(false, 78459735791271921, 49),
+            Some(78459735791271921e+049f64)
+        );
+        assert_eq!(
+            lemire(false, 272104041512242479, 200),
+            Some(272104041512242479e+200f64)
+        );
+        assert_eq!(
+            lemire(false, 6802601037806061975, 198),
+            Some(6802601037806061975e+198f64)
+        );
+
+        assert_eq!(lemire(false, 9, -265), Some(9e-265f64));
+        assert_eq!(lemire(false, 85, -37), Some(85e-037f64));
+        assert_eq!(lemire(false, 623, 100), Some(623e+100f64));
+        assert_eq!(lemire(false, 3571, 263), Some(3571e+263f64));
+        assert_eq!(lemire(false, 81661, 153), Some(81661e+153f64));
+        assert_eq!(lemire(false, 920657, -23), Some(920657e-023f64));
+        assert_eq!(lemire(false, 4603285, -24), Some(4603285e-024f64));
+        assert_eq!(lemire(false, 87575437, -309), Some(87575437e-309f64));
+        assert_eq!(lemire(false, 245540327, 122), Some(245540327e+122f64));
+        assert_eq!(lemire(false, 6138508175, 120), Some(6138508175e+120f64));
+        assert_eq!(lemire(false, 83356057653, 193), Some(83356057653e+193f64));
+        assert_eq!(lemire(false, 619534293513, 124), Some(619534293513e+124f64));
+        assert_eq!(
+            lemire(false, 2335141086879, 218),
+            Some(2335141086879e+218f64)
+        );
+        assert_eq!(
+            lemire(false, 36167929443327, -159),
+            Some(36167929443327e-159f64)
+        );
+        assert_eq!(
+            lemire(false, 609610927149051, -255),
+            Some(609610927149051e-255f64)
+        );
+        assert_eq!(
+            lemire(false, 3743626360493413, -165),
+            Some(3743626360493413e-165f64)
+        );
+        assert_eq!(
+            lemire(false, 94080055902682397, -242),
+            Some(94080055902682397e-242f64)
+        );
+        assert_eq!(
+            lemire(false, 899810892172646163, 283),
+            Some(899810892172646163e+283f64)
+        );
+        assert_eq!(
+            lemire(false, 7120190517612959703, 120),
+            Some(7120190517612959703e+120f64)
+        );
+    }
+}
