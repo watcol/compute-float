@@ -1,17 +1,10 @@
-#![cfg_attr(feature = "no-std", no_std)]
+#![no_std]
 #![doc(test(attr(warn(warnings))))]
 
 /// Computes a float using Eisel-Lemire algolithm.
-pub fn compute_float<F: Float>(neg: bool, man: u64, exp10: i32) -> F {
-    match lemire(neg, man, exp10) {
-        Some(f) => f,
-        None => F::compute(neg, man, exp10),
-    }
-}
-
-fn lemire<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
-    let zero = F::from_fp(neg, 0, F::EXP_MIN);
-    let inf = F::from_fp(neg, 0, F::EXP_MAX);
+pub fn compute_float<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
+    let zero = F::from_fp(neg, 0, (F::EXP_ZERO + F::EMAX) as u32);
+    let inf = F::from_fp(neg, 0, (F::EXP_INF + F::EMAX) as u32);
     if man == 0 || exp10 < POWERS_OF_TEN_MIN {
         return Some(zero);
     } else if exp10 > POWERS_OF_TEN_MAX {
@@ -48,15 +41,15 @@ fn lemire<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
     }
 
     // Handle subnormal values.
-    if exp2 <= F::EXP_MIN {
-        let below = F::EXP_MIN + 1 - exp2;
+    if exp2 <= F::EXP_ZERO {
+        let below = F::EXP_ZERO + 1 - exp2;
         if below >= 64 {
             return Some(zero);
         }
         man >>= below;
         man += man & 1;
         man >>= 1;
-        return Some(F::from_fp(neg, man, F::EXP_MIN));
+        return Some(F::from_fp(neg, man, (F::EXP_ZERO + F::EMAX) as u32));
     }
 
     man += man & 1;
@@ -66,11 +59,11 @@ fn lemire<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
         exp2 += 1;
     }
 
-    if exp2 >= F::EXP_MAX {
+    if exp2 >= F::EXP_INF {
         return Some(inf);
     }
 
-    Some(F::from_fp(neg, man & F::MAN_MASK, exp2))
+    Some(F::from_fp(neg, man & F::MAN_MASK, (exp2 + F::EMAX) as u32))
 }
 
 fn mul128(a: u64, b: u64) -> (u64, u64) {
@@ -78,18 +71,21 @@ fn mul128(a: u64, b: u64) -> (u64, u64) {
     ((r >> 64) as u64, r as u64)
 }
 
+/// A trait for IEEE754 floating point numbers.
 pub trait Float {
-    /// Bit length of mantissa part.
+    /// The bit length of mantissa part.
     const MANTISSA_BITS: usize;
-    /// Bit length of exponent part.
+
+    /// The bit length of exponent part.
     const EXP_BITS: usize;
 
-    /// The exponent bias.
+    /// The exponent bias (the default is `(1 << (Self::EXP_BITS - 1)) - 1`).
     const EMAX: i32 = (1 << (Self::EXP_BITS - 1)) - 1;
+
     #[doc(hidden)]
-    const EXP_MIN: i32 = -Self::EMAX;
+    const EXP_ZERO: i32 = -Self::EMAX;
     #[doc(hidden)]
-    const EXP_MAX: i32 = Self::EMAX + 1;
+    const EXP_INF: i32 = Self::EMAX + 1;
     #[doc(hidden)]
     const MASK_BITS: usize = 64 - 3 - Self::MANTISSA_BITS;
     #[doc(hidden)]
@@ -97,11 +93,8 @@ pub trait Float {
     #[doc(hidden)]
     const MAN_MASK: u64 = (1 << Self::MANTISSA_BITS) - 1;
 
-    /// Produce the float from sign, mantissa, and exponent.
-    fn from_fp(neg: bool, mantissa: u64, exp2: i32) -> Self;
-
-    /// Manually compute float from sign, mantissa and exponent of base 10.
-    fn compute(neg: bool, mantissa: u64, exp10: i32) -> Self;
+    /// Produce the float from a sign, a mantissa, and a biased exponent.
+    fn from_fp(neg: bool, mantissa: u64, exp2: u32) -> Self;
 }
 
 impl Float for f32 {
@@ -109,29 +102,8 @@ impl Float for f32 {
     const EXP_BITS: usize = 8;
 
     #[inline]
-    fn from_fp(neg: bool, mantissa: u64, exp2: i32) -> Self {
-        f32::from_bits((neg as u32) << 31 | ((exp2 + Self::EMAX) as u32) << 23 | mantissa as u32)
-    }
-
-    fn compute(neg: bool, mantissa: u64, exp10: i32) -> Self {
-        let pow = {
-            #[cfg(feature = "libm")]
-            {
-                libm::powf(10.0f32, exp10 as f32)
-            }
-            #[cfg(not(feature = "libm"))]
-            {
-                10.0f32.powf(exp10 as f32)
-            }
-        };
-
-        let p = mantissa as f32 * pow;
-
-        if neg {
-            -p
-        } else {
-            p
-        }
+    fn from_fp(neg: bool, mantissa: u64, exp2: u32) -> Self {
+        f32::from_bits((neg as u32) << 31 | exp2 << 23 | mantissa as u32)
     }
 }
 
@@ -140,30 +112,8 @@ impl Float for f64 {
     const EXP_BITS: usize = 11;
 
     #[inline]
-    fn from_fp(neg: bool, mantissa: u64, exp2: i32) -> Self {
-        f64::from_bits((neg as u64) << 63 | ((exp2 + Self::EMAX) as u64) << 52 | mantissa)
-    }
-
-    #[inline]
-    fn compute(neg: bool, mantissa: u64, exp10: i32) -> Self {
-        let pow = {
-            #[cfg(feature = "libm")]
-            {
-                libm::pow(10.0f64, exp10 as f64)
-            }
-            #[cfg(not(feature = "libm"))]
-            {
-                10.0f64.powf(exp10 as f64)
-            }
-        };
-
-        let p = mantissa as f64 * pow;
-
-        if neg {
-            -p
-        } else {
-            p
-        }
+    fn from_fp(neg: bool, mantissa: u64, exp2: u32) -> Self {
+        f64::from_bits((neg as u64) << 63 | (exp2 as u64) << 52 | mantissa)
     }
 }
 
@@ -877,132 +827,171 @@ mod test {
 
     #[test]
     fn test_f32() {
-        assert_eq!(lemire(false, 5, -20), Some(5e-20f32));
-        assert_eq!(lemire(false, 67, 14), Some(67e+14f32));
-        assert_eq!(lemire(false, 985, 15), Some(985e+15f32));
-        assert_eq!(lemire(false, 55895, -16), Some(55895e-16f32));
-        assert_eq!(lemire(false, 7038531, -32), Some(7038531e-32f32));
-        assert_eq!(lemire(false, 702990899, -20), Some(702990899e-20f32));
-        assert_eq!(lemire(false, 25933168707, 13), Some(25933168707e+13f32));
-        assert_eq!(lemire(false, 596428896559, 20), Some(596428896559e+20f32));
+        assert_eq!(compute_float(false, 5, -20), Some(5e-20f32));
+        assert_eq!(compute_float(false, 67, 14), Some(67e+14f32));
+        assert_eq!(compute_float(false, 985, 15), Some(985e+15f32));
+        assert_eq!(compute_float(false, 55895, -16), Some(55895e-16f32));
+        assert_eq!(compute_float(false, 7038531, -32), Some(7038531e-32f32));
+        assert_eq!(compute_float(false, 702990899, -20), Some(702990899e-20f32));
+        assert_eq!(
+            compute_float(false, 25933168707, 13),
+            Some(25933168707e+13f32)
+        );
+        assert_eq!(
+            compute_float(false, 596428896559, 20),
+            Some(596428896559e+20f32)
+        );
 
-        assert_eq!(lemire(false, 3, -23), Some(3e-23f32));
-        assert_eq!(lemire(false, 57, 18), Some(57e+18f32));
-        assert_eq!(lemire(false, 789, -35), Some(789e-35f32));
-        assert_eq!(lemire(false, 2539, -18), Some(2539e-18f32));
-        assert_eq!(lemire(false, 76173, 28), Some(76173e+28f32));
-        assert_eq!(lemire(false, 887745, -11), Some(887745e-11f32));
-        assert_eq!(lemire(false, 5382571, -37), Some(5382571e-37f32));
-        assert_eq!(lemire(false, 82381273, -35), Some(82381273e-35f32));
-        assert_eq!(lemire(false, 750486563, -38), Some(750486563e-38f32));
-        assert_eq!(lemire(false, 3752432815, -39), Some(3752432815e-39f32));
-        assert_eq!(lemire(false, 75224575729, -45), Some(75224575729e-45f32));
-        assert_eq!(lemire(false, 459926601011, 15), Some(459926601011e+15f32));
+        assert_eq!(compute_float(false, 3, -23), Some(3e-23f32));
+        assert_eq!(compute_float(false, 57, 18), Some(57e+18f32));
+        assert_eq!(compute_float(false, 789, -35), Some(789e-35f32));
+        assert_eq!(compute_float(false, 2539, -18), Some(2539e-18f32));
+        assert_eq!(compute_float(false, 76173, 28), Some(76173e+28f32));
+        assert_eq!(compute_float(false, 887745, -11), Some(887745e-11f32));
+        assert_eq!(compute_float(false, 5382571, -37), Some(5382571e-37f32));
+        assert_eq!(compute_float(false, 82381273, -35), Some(82381273e-35f32));
+        assert_eq!(compute_float(false, 750486563, -38), Some(750486563e-38f32));
+        assert_eq!(
+            compute_float(false, 3752432815, -39),
+            Some(3752432815e-39f32)
+        );
+        assert_eq!(
+            compute_float(false, 75224575729, -45),
+            Some(75224575729e-45f32)
+        );
+        assert_eq!(
+            compute_float(false, 459926601011, 15),
+            Some(459926601011e+15f32)
+        );
 
-        assert_eq!(lemire(false, 7693, -42), Some(7693e-42f32));
-        assert_eq!(lemire(false, 996622, -44), Some(996622e-44f32));
-        assert_eq!(lemire(false, 60419369, -46), Some(60419369e-46f32));
-        assert_eq!(lemire(false, 6930161142, -48), Some(6930161142e-48f32));
+        assert_eq!(compute_float(false, 7693, -42), Some(7693e-42f32));
+        assert_eq!(compute_float(false, 996622, -44), Some(996622e-44f32));
+        assert_eq!(compute_float(false, 60419369, -46), Some(60419369e-46f32));
+        assert_eq!(
+            compute_float(false, 6930161142, -48),
+            Some(6930161142e-48f32)
+        );
     }
 
     #[test]
     fn test_f64() {
-        assert_eq!(lemire(false, 5, 125), Some(5e+125f64));
-        assert_eq!(lemire(false, 69, 267), Some(69e+267f64));
-        assert_eq!(lemire(false, 999, -26), Some(999e-26f64));
-        assert_eq!(lemire(false, 7681, -34), Some(7681e-34f64));
-        assert_eq!(lemire(false, 75569, -254), Some(75569e-254f64));
-        assert_eq!(lemire(false, 928609, -261), Some(928609e-261f64));
-        assert_eq!(lemire(false, 9210917, 80), Some(9210917e+80f64));
-        assert_eq!(lemire(false, 84863171, 114), Some(84863171e+114f64));
-        assert_eq!(lemire(false, 653777767, 273), Some(653777767e+273f64));
-        assert_eq!(lemire(false, 5232604057, -298), Some(5232604057e-298f64));
-        assert_eq!(lemire(false, 27235667517, -109), Some(27235667517e-109f64));
+        assert_eq!(compute_float(false, 5, 125), Some(5e+125f64));
+        assert_eq!(compute_float(false, 69, 267), Some(69e+267f64));
+        assert_eq!(compute_float(false, 999, -26), Some(999e-26f64));
+        assert_eq!(compute_float(false, 7681, -34), Some(7681e-34f64));
+        assert_eq!(compute_float(false, 75569, -254), Some(75569e-254f64));
+        assert_eq!(compute_float(false, 928609, -261), Some(928609e-261f64));
+        assert_eq!(compute_float(false, 9210917, 80), Some(9210917e+80f64));
+        assert_eq!(compute_float(false, 84863171, 114), Some(84863171e+114f64));
         assert_eq!(
-            lemire(false, 653532977297, -123),
+            compute_float(false, 653777767, 273),
+            Some(653777767e+273f64)
+        );
+        assert_eq!(
+            compute_float(false, 5232604057, -298),
+            Some(5232604057e-298f64)
+        );
+        assert_eq!(
+            compute_float(false, 27235667517, -109),
+            Some(27235667517e-109f64)
+        );
+        assert_eq!(
+            compute_float(false, 653532977297, -123),
             Some(653532977297e-123f64)
         );
         assert_eq!(
-            lemire(false, 3142213164987, -294),
+            compute_float(false, 3142213164987, -294),
             Some(3142213164987e-294f64)
         );
         assert_eq!(
-            lemire(false, 46202199371337, -72),
+            compute_float(false, 46202199371337, -72),
             Some(46202199371337e-072f64)
         );
         assert_eq!(
-            lemire(false, 231010996856685, -73),
+            compute_float(false, 231010996856685, -73),
             Some(231010996856685e-073f64)
         );
         assert_eq!(
-            lemire(false, 9324754620109615, 212),
+            compute_float(false, 9324754620109615, 212),
             Some(9324754620109615e+212f64)
         );
         assert_eq!(
-            lemire(false, 78459735791271921, 49),
+            compute_float(false, 78459735791271921, 49),
             Some(78459735791271921e+049f64)
         );
         assert_eq!(
-            lemire(false, 272104041512242479, 200),
+            compute_float(false, 272104041512242479, 200),
             Some(272104041512242479e+200f64)
         );
         assert_eq!(
-            lemire(false, 6802601037806061975, 198),
+            compute_float(false, 6802601037806061975, 198),
             Some(6802601037806061975e+198f64)
         );
 
-        assert_eq!(lemire(false, 9, -265), Some(9e-265f64));
-        assert_eq!(lemire(false, 85, -37), Some(85e-037f64));
-        assert_eq!(lemire(false, 623, 100), Some(623e+100f64));
-        assert_eq!(lemire(false, 3571, 263), Some(3571e+263f64));
-        assert_eq!(lemire(false, 81661, 153), Some(81661e+153f64));
-        assert_eq!(lemire(false, 920657, -23), Some(920657e-023f64));
-        assert_eq!(lemire(false, 4603285, -24), Some(4603285e-024f64));
-        assert_eq!(lemire(false, 87575437, -309), Some(87575437e-309f64));
-        assert_eq!(lemire(false, 245540327, 122), Some(245540327e+122f64));
-        assert_eq!(lemire(false, 6138508175, 120), Some(6138508175e+120f64));
-        assert_eq!(lemire(false, 83356057653, 193), Some(83356057653e+193f64));
-        assert_eq!(lemire(false, 619534293513, 124), Some(619534293513e+124f64));
+        assert_eq!(compute_float(false, 9, -265), Some(9e-265f64));
+        assert_eq!(compute_float(false, 85, -37), Some(85e-037f64));
+        assert_eq!(compute_float(false, 623, 100), Some(623e+100f64));
+        assert_eq!(compute_float(false, 3571, 263), Some(3571e+263f64));
+        assert_eq!(compute_float(false, 81661, 153), Some(81661e+153f64));
+        assert_eq!(compute_float(false, 920657, -23), Some(920657e-023f64));
+        assert_eq!(compute_float(false, 4603285, -24), Some(4603285e-024f64));
+        assert_eq!(compute_float(false, 87575437, -309), Some(87575437e-309f64));
         assert_eq!(
-            lemire(false, 2335141086879, 218),
+            compute_float(false, 245540327, 122),
+            Some(245540327e+122f64)
+        );
+        assert_eq!(
+            compute_float(false, 6138508175, 120),
+            Some(6138508175e+120f64)
+        );
+        assert_eq!(
+            compute_float(false, 83356057653, 193),
+            Some(83356057653e+193f64)
+        );
+        assert_eq!(
+            compute_float(false, 619534293513, 124),
+            Some(619534293513e+124f64)
+        );
+        assert_eq!(
+            compute_float(false, 2335141086879, 218),
             Some(2335141086879e+218f64)
         );
         assert_eq!(
-            lemire(false, 36167929443327, -159),
+            compute_float(false, 36167929443327, -159),
             Some(36167929443327e-159f64)
         );
         assert_eq!(
-            lemire(false, 609610927149051, -255),
+            compute_float(false, 609610927149051, -255),
             Some(609610927149051e-255f64)
         );
         assert_eq!(
-            lemire(false, 3743626360493413, -165),
+            compute_float(false, 3743626360493413, -165),
             Some(3743626360493413e-165f64)
         );
         assert_eq!(
-            lemire(false, 94080055902682397, -242),
+            compute_float(false, 94080055902682397, -242),
             Some(94080055902682397e-242f64)
         );
         assert_eq!(
-            lemire(false, 899810892172646163, 283),
+            compute_float(false, 899810892172646163, 283),
             Some(899810892172646163e+283f64)
         );
         assert_eq!(
-            lemire(false, 7120190517612959703, 120),
+            compute_float(false, 7120190517612959703, 120),
             Some(7120190517612959703e+120f64)
         );
 
-        assert_eq!(lemire(false, 23, -322), Some(23e-322f64));
+        assert_eq!(compute_float(false, 23, -322), Some(23e-322f64));
         assert_eq!(
-            lemire(false, 215545855514445, -323),
+            compute_float(false, 215545855514445, -323),
             Some(215545855514445e-323f64)
         );
         assert_eq!(
-            lemire(false, 9107113384184, -324),
+            compute_float(false, 9107113384184, -324),
             Some(9107113384184e-324f64)
         );
         assert_eq!(
-            lemire(false, 663285423712495731, -341),
+            compute_float(false, 663285423712495731, -341),
             Some(663285423712495731e-341f64)
         );
     }
