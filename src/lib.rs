@@ -1,7 +1,7 @@
 #![no_std]
 #![doc(test(attr(warn(warnings))))]
 
-/// Computes a float using Eisel-Lemire algolithm.
+/// Computes a floating point number using Eisel-Lemire algolithm.
 pub fn compute_float<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
     let zero = F::from_fp(neg, 0, (F::EXP_ZERO + F::EMAX) as u32);
     let inf = F::from_fp(neg, 0, (F::EXP_INF + F::EMAX) as u32);
