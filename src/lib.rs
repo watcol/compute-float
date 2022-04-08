@@ -22,18 +22,6 @@ fn lemire<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
     man <<= lz;
     let mut exp2 = (exp10.wrapping_mul(LOG2_10.0) >> LOG2_10.1) + 64 - lz as i32;
 
-    // Handle subnormal values.
-    if exp2 <= F::EXP_MIN {
-        let below = F::EXP_MIN + 1 - exp2;
-        if below >= F::MANTISSA_BITS as i32 {
-            return Some(zero);
-        }
-        man >>= below;
-        man += man & 1;
-        man >>= 1;
-        return Some(F::from_fp(neg, man, F::EXP_MIN));
-    }
-
     // Get product approx.
     let (hi, lo) = {
         let (mut hi, mut lo) = mul128(man, POWERS_OF_TEN[(exp10 - POWERS_OF_TEN_MIN) as usize].1);
@@ -57,6 +45,18 @@ fn lemire<F: Float>(neg: bool, mut man: u64, exp10: i32) -> Option<F> {
 
     if lo == 0 && hi & F::MASK == 0 && man & 3 == 1 {
         return None;
+    }
+
+    // Handle subnormal values.
+    if exp2 <= F::EXP_MIN {
+        let below = F::EXP_MIN + 1 - exp2;
+        if below >= 64 {
+            return Some(zero);
+        }
+        man >>= below;
+        man += man & 1;
+        man >>= 1;
+        return Some(F::from_fp(neg, man, F::EXP_MIN));
     }
 
     man += man & 1;
@@ -898,9 +898,14 @@ mod test {
         assert_eq!(lemire(false, 3752432815, -39), Some(3752432815e-39f32));
         assert_eq!(lemire(false, 75224575729, -45), Some(75224575729e-45f32));
         assert_eq!(lemire(false, 459926601011, 15), Some(459926601011e+15f32));
+
+        assert_eq!(lemire(false, 7693, -42), Some(7693e-42f32));
+        assert_eq!(lemire(false, 996622, -44), Some(996622e-44f32));
+        assert_eq!(lemire(false, 60419369, -46), Some(60419369e-46f32));
+        assert_eq!(lemire(false, 6930161142, -48), Some(6930161142e-48f32));
     }
 
-    // #[test]
+    #[test]
     fn test_f64() {
         assert_eq!(lemire(false, 5, 125), Some(5e+125f64));
         assert_eq!(lemire(false, 69, 267), Some(69e+267f64));
@@ -985,6 +990,20 @@ mod test {
         assert_eq!(
             lemire(false, 7120190517612959703, 120),
             Some(7120190517612959703e+120f64)
+        );
+
+        assert_eq!(lemire(false, 23, -322), Some(23e-322f64));
+        assert_eq!(
+            lemire(false, 215545855514445, -323),
+            Some(215545855514445e-323f64)
+        );
+        assert_eq!(
+            lemire(false, 9107113384184, -324),
+            Some(9107113384184e-324f64)
+        );
+        assert_eq!(
+            lemire(false, 663285423712495731, -341),
+            Some(663285423712495731e-341f64)
         );
     }
 }
