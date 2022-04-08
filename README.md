@@ -16,13 +16,6 @@ Add to your `Cargo.toml`:
 compute-float = "0.1.0"
 ```
 
-If you are in the `no_std` environment:
-```toml
-[dependencies.compute-float]
-version = "0.1.0"
-features = ["no-std"]
-```
-
 ## Documentation
 API Documentations are available on [here](https://docs.rs/compute-float).
 
